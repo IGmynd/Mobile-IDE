@@ -33,10 +33,21 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install buildozer cython==0.29.36
 
+      # Добавляем кэширование, чтобы при следующих сборках не скачивать SDK заново
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-global-
+
       - name: Build APK
         run: |
-         export MAKEFLAGS="-j1"
-         buildozer -v android debug
+          # Ограничиваем использование ядер, чтобы GitHub Actions не убил процесс из-за нехватки памяти (OOM)
+          export MAKEFLAGS="-j1"
+          buildozer -v android debug
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
