@@ -1,24 +1,29 @@
 [app]
-
 title = MobileIDE
 package.name = mobileide
-package.domain = org.igmunt
-source.dir = .
-source.include_exts = py,kv,png,jpg,atlas,ttf
-version = 0.1.0
+package.domain = org.igmund
 
-requirements = python3,kivy
+source.dir = .
+source.include_exts = py,png,jpg,kv,atlas
+
+version = 0.1
+# Жестко фиксируем стабильную версию Kivy, чтобы сборщик не скачал сырую бету
+requirements = python3,kivy==2.3.0
 
 orientation = portrait
 fullscreen = 0
 
+# --- Настройки Android ---
+# Возвращаемся на стабильные версии, которые 100% дружат с python-for-android
 android.api = 33
-android.minapi = 25b
-android.ndk = 28c
+android.minapi = 24
+android.ndk = 25b
+
+# Оставляем только нужную архитектуру
 android.archs = arm64-v8a
+
+# Разрешения
+android.permissions = INTERNET
+
+# Автоматически принимаем лицензии
 android.accept_sdk_license = True
-
-[buildozer]
-
-log_level = 2
-warn_on_root = 0
