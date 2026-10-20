@@ -1,8 +1,8 @@
 name: Build MobileIDE APK
 
-on:workflow_dispatch:push:branches:- main
+on: workflow_dispatch: push:branches: - main
 
-jobs:build:runs-on:ubuntu-22.04
+jobs: build: runs-on: ubuntu-22.04
 
 steps:
   - name: Checkout repository
