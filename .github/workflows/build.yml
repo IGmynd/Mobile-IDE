@@ -30,13 +30,14 @@ jobs:
         restore-keys: |
           buildozer-local-
 
-    - name: Build APK with PIP_USER fix
+    # Создаем симлинк python3.11 и запускаем сборку
+    - name: Build APK (with python3.11 symlink fix)
       run: |
         docker run --rm \
-          -e PIP_USER=false \
           -v "${{ github.workspace }}":/home/user/hostcwd \
           -v "$HOME/.buildozer":/home/user/.buildozer \
-          kivy/buildozer android debug
+          --entrypoint /bin/bash \
+          kivy/buildozer -c "mkdir -p /home/user/bin && ln -sf \$(which python3) /home/user/bin/python3.11 && export PATH=/home/user/bin:\$PATH && buildozer -v android debug"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
