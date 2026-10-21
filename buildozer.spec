@@ -8,7 +8,7 @@ version = 0.2.0
 orientation = portrait
 
 # Жёстко фиксируем Python 3.11 и добавляем jnius
-requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.0,jnius>=1.4.0,kivy_garden.codeinput,pygments
+requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.0,jnius>=1.4.0
 
 android.api = 33
 android.minapi = 24
