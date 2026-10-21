@@ -1,6 +1,3 @@
-from kivy.config import Config
-Config.set('graphics', 'orientation', 'portrait')
-
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
@@ -24,9 +21,16 @@ THEME_COLOR = (0.6, 0.2, 0.8, 1)
 MENU_BG_COLOR = (0.3, 0.1, 0.4, 1)
 
 Window.clearcolor = THEME_COLOR
-Window.softinput_mode = 'below_target'
 
-# === РЕДАКТОР С УМНЫМИ ОТСТУПАМИ (БЕЗ ВНЕШНИХ БИБЛИОТЕК) ===
+# Функция для записи ошибок в файл, если приложение вылетит
+def log_crash(e):
+    try:
+        path = "/storage/emulated/0/Download/MobileIDE_crash.txt"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(traceback.format_exc())
+    except:
+        pass
+
 class CodeEditor(TextInput):
     def insert_text(self, substring, from_undo=False):
         if substring == '\n':
@@ -40,16 +44,12 @@ class CodeEditor(TextInput):
         super().insert_text(substring, from_undo)
 
 class MainLayout(FloatLayout):
-    # Теперь мы передаем путь к папке напрямую при создании
     def __init__(self, projects_dir, **kwargs):
         super().__init__(**kwargs)
         self.projects_dir = projects_dir
-        
         self.menu_left_open = False
         self.menu_right_open = False
         self.current_file = "main_script.py"
-        self.is_running = False
-        self.stop_requested = False
 
         # === ОСНОВНОЙ КОНТЕНТ ===
         self.main_content = BoxLayout(orientation='vertical')
@@ -71,7 +71,6 @@ class MainLayout(FloatLayout):
         self.top_bar.add_widget(title)
         self.top_bar.add_widget(self.menu_right_btn)
 
-        # Редактор
         self.editor = CodeEditor(
             text='print("Hello, MobileIDE!")\n',
             font_size='16sp',
@@ -80,7 +79,6 @@ class MainLayout(FloatLayout):
             cursor_color=(1, 1, 1, 1)
         )
 
-        # Вывод
         self.output = TextInput(
             readonly=True,
             font_size='14sp',
@@ -89,10 +87,10 @@ class MainLayout(FloatLayout):
             text="Готов к работе..."
         )
 
-        # Панель быстрых символов
         self.shortcut_bar = BoxLayout(size_hint_y=None, height='40dp', spacing=2)
-        self.shortcut_bar.canvas.before.add(Color(0.2, 0.2, 0.2, 1))
-        self.shortcut_bar.canvas.before.add(Rectangle(size=self.shortcut_bar.size, pos=self.shortcut_bar.pos))
+        with self.shortcut_bar.canvas.before:
+            Color(0.2, 0.2, 0.2, 1)
+            self.shortcut_bg = Rectangle(size=self.shortcut_bar.size, pos=self.shortcut_bar.pos)
         self.shortcut_bar.bind(size=self._update_shortcut_bg, pos=self._update_shortcut_bg)
         
         shortcuts = ["Tab", ":", "=", "(", ")", "[", "]", "{", "}", '"', "'", "+", "-"]
@@ -115,16 +113,12 @@ class MainLayout(FloatLayout):
 
         btn_save = Button(text="Сохранить", size_hint_y=None, height='45dp', background_color=(0.2, 0.4, 0.8, 1))
         btn_save.bind(on_press=self.save_code)
-        
         btn_export = Button(text="Экспорт в Загрузки", size_hint_y=None, height='45dp', background_color=(0.8, 0.6, 0.2, 1))
         btn_export.bind(on_press=self.export_code)
-        
         btn_clear = Button(text="Очистить вывод", size_hint_y=None, height='45dp', background_color=(0.5, 0.5, 0.5, 1))
         btn_clear.bind(on_press=self.clear_output)
-        
         btn_search = Button(text="Поиск и Замена", size_hint_y=None, height='45dp', background_color=(0.4, 0.4, 0.6, 1))
         btn_search.bind(on_press=self.show_search_popup)
-
         btn_toggle_output = Button(text="Скрыть вывод", size_hint_y=None, height='45dp', background_color=(0.6, 0.3, 0.6, 1))
         btn_toggle_output.bind(on_press=self.toggle_output_panel)
 
@@ -172,7 +166,6 @@ class MainLayout(FloatLayout):
         self.refresh_files()
         self.load_file(self.current_file)
 
-    # --- Обновление фонов ---
     def _update_top_bar_bg(self, instance, value):
         self.top_bar_bg.pos = instance.pos
         self.top_bar_bg.size = instance.size
@@ -183,18 +176,14 @@ class MainLayout(FloatLayout):
         self.menu_right_bg.pos = instance.pos
         self.menu_right_bg.size = instance.size
     def _update_shortcut_bg(self, instance, value):
-        instance.canvas.before.clear()
-        with instance.canvas.before:
-            Color(0.2, 0.2, 0.2, 1)
-            Rectangle(size=instance.size, pos=instance.pos)
+        self.shortcut_bg.pos = instance.pos
+        self.shortcut_bg.size = instance.size
 
-    # --- Панель символов ---
     def insert_shortcut(self, text):
         if not self.editor.focus: self.editor.focus = True
         if text == "Tab": self.editor.insert_text("    ")
         else: self.editor.insert_text(text)
 
-    # --- Анимация меню ---
     def toggle_left_menu(self, instance=None):
         if self.menu_right_open: self.toggle_right_menu()
         anim = Animation(pos_hint={'x': -1 if self.menu_left_open else 0}, duration=0.2)
@@ -208,7 +197,6 @@ class MainLayout(FloatLayout):
         anim.start(self.side_menu_right)
         self.menu_right_open = not self.menu_right_open
 
-    # --- Работа с файлами ---
     def refresh_files(self):
         self.files_layout.clear_widgets()
         files = [f for f in os.listdir(self.projects_dir) if f.endswith('.py')]
@@ -280,26 +268,18 @@ class MainLayout(FloatLayout):
         except Exception as e:
             self.output.text = f"❌ Ошибка экспорта (нет прав?): {e}"
 
-    # === БЕЗОПАСНЫЙ ИМПОРТ ФАЙЛА ===
     def show_import_file_popup(self, instance):
         if self.menu_right_open: self.toggle_right_menu()
-        
-        # Импортируем проводник ТОЛЬКО здесь, чтобы не грузить систему при старте
         from kivy.uix.filechooser import FileChooserListView
-        
         filechooser = FileChooserListView(path="/storage/emulated/0/Download", filters=['*.py'])
-        
         layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
         layout.add_widget(filechooser)
-        
         btn_layout = BoxLayout(size_hint_y=None, height='40dp', spacing=10)
         btn_cancel = Button(text="Отмена", background_color=(0.6, 0.2, 0.2, 1))
         btn_import = Button(text="Импортировать", background_color=(0.2, 0.6, 0.2, 1))
-        
         btn_layout.add_widget(btn_cancel)
         btn_layout.add_widget(btn_import)
         layout.add_widget(btn_layout)
-
         popup = Popup(title="Выбери .py файл", content=layout, size_hint=(0.95, 0.9))
 
         def do_import(inst):
@@ -327,7 +307,6 @@ class MainLayout(FloatLayout):
         btn_layout = BoxLayout(size_hint_y=None, height='40dp', spacing=10)
         btn_cancel = Button(text="Отмена", background_color=(0.6, 0.2, 0.2, 1))
         btn_replace = Button(text="Заменить всё", background_color=(0.2, 0.6, 0.2, 1))
-
         btn_layout.add_widget(btn_cancel)
         btn_layout.add_widget(btn_replace)
         content.add_widget(Label(text="Поиск и замена", size_hint_y=None, height='30dp'))
@@ -357,7 +336,7 @@ class MainLayout(FloatLayout):
             self.output.opacity = 0
         else:
             self.output.size_hint_y = 1
-            self.output.height = self.output.parent.height * 0.3
+            self.output.height = Window.height * 0.3
             self.output.opacity = 1
         if self.menu_left_open: self.toggle_left_menu()
 
@@ -371,7 +350,6 @@ class MainLayout(FloatLayout):
         btn_layout = BoxLayout(size_hint_y=None, height='40dp', spacing=10)
         btn_cancel = Button(text="Отмена", background_color=(0.6, 0.2, 0.2, 1))
         btn_create = Button(text="Создать", background_color=(0.2, 0.6, 0.2, 1))
-
         btn_layout.add_widget(btn_cancel)
         btn_layout.add_widget(btn_create)
         content.add_widget(Label(text="Имя файла:", size_hint_y=None, height='30dp'))
@@ -395,19 +373,11 @@ class MainLayout(FloatLayout):
         popup.open()
         text_input.focus = True
 
-    # === ЗАПУСК И ОСТАНОВКА КОДА ===
+    # УПРОЩЕННЫЙ ЗАПУСК БЕЗ sys.settrace (чтобы не было вылетов)
     def run_code(self, instance):
-        if self.is_running:
-            self.stop_requested = True
-            self.output.text += "\n[Запрошена остановка...]"
-            return
-
         code = self.editor.text
         self.output.text = "Выполняется..."
-        self.is_running = True
-        self.stop_requested = False
-        
-        self.btn_run.text = "СТОП"
+        self.btn_run.text = "СТОП (не работает)"
         self.btn_run.background_color = (0.8, 0.2, 0.2, 1)
 
         if self.menu_left_open: self.toggle_left_menu()
@@ -423,34 +393,33 @@ class MainLayout(FloatLayout):
         if self.projects_dir not in sys.path:
             sys.path.insert(0, self.projects_dir)
 
-        def trace_func(frame, event, arg):
-            if self.stop_requested:
-                raise RuntimeError("Выполнение остановлено пользователем.")
-            return trace_func
-
         try:
-            sys.settrace(trace_func)
             exec(code, {"__name__": "__main__"})
             result = captured_output.getvalue()
             if not result: result = "[Код выполнен успешно]"
-        except RuntimeError as e:
-            result = f"ОСТАНОВЛЕНО:\n{e}"
         except Exception:
             result = f"ОШИБКА:\n{traceback.format_exc()}"
         finally:
-            sys.settrace(None)
             sys.stdout = old_stdout
             Clock.schedule_once(lambda dt: self._finish_execution(result))
 
     def _finish_execution(self, result):
         self.output.text = result
-        self.output.scroll_y = 0 # Прокрутка в самый низ
-        self.is_running = False
-        self.stop_requested = False
+        self.output.scroll_y = 0 
         self.btn_run.text = "Запуск"
         self.btn_run.background_color = (0.2, 0.6, 0.2, 1)
 
-
 class MobileIDEApp(App):
     def build(self):
-        self.title = "MobileIDE v0.3"
+        self.title = "MobileIDE v0.4"
+        try:
+            projects_dir = os.path.join(self.user_data_dir, "projects")
+            if not os.path.exists(projects_dir):
+                os.makedirs(projects_dir)
+            return MainLayout(projects_dir=projects_dir)
+        except Exception as e:
+            log_crash(e)
+            return Label(text=f"Ошибка запуска:\n{e}")
+
+if __name__ == '__main__':
+    MobileIDEApp().run()
