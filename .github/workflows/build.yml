@@ -14,7 +14,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Кэшируем глобальную директорию Buildozer (SDK, NDK)
     - name: Cache Buildozer global directory
       uses: actions/cache@v4
       with:
@@ -23,7 +22,6 @@ jobs:
         restore-keys: |
           buildozer-global-
 
-    # Кэшируем локальную директорию сборки (результаты компиляции)
     - name: Cache local .buildozer
       uses: actions/cache@v4
       with:
@@ -32,15 +30,14 @@ jobs:
         restore-keys: |
           buildozer-local-
 
-    # Запускаем сборку через официальный Docker-образ с фиксом appdirs
-    - name: Build APK with official Buildozer Docker image
+    - name: Build APK with PIP_USER fix
       run: |
         docker run --rm \
+          -e PIP_USER=false \
           -v "${{ github.workspace }}":/home/user/hostcwd \
           -v "$HOME/.buildozer":/home/user/.buildozer \
-          kivy/buildozer sh -c "pip install appdirs && buildozer -v android debug"
+          kivy/buildozer android debug
 
-    # Загружаем готовый APK
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
