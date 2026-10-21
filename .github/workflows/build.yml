@@ -30,13 +30,14 @@ jobs:
         restore-keys: |
           buildozer-local-
 
-    - name: Build APK (Auto-yes & python fix)
+    - name: Build APK (Clean broken p4a & fix HOME)
       run: |
         docker run --rm \
+          -e HOME=/home/user \
           -v "${{ github.workspace }}":/home/user/hostcwd \
           -v "$HOME/.buildozer":/home/user/.buildozer \
           --entrypoint /bin/bash \
-          kivy/buildozer -c "mkdir -p /home/user/bin && ln -sf \$(which python3) /home/user/bin/python3.11 && export PATH=/home/user/bin:\$PATH && yes | buildozer -v android debug"
+          kivy/buildozer -c "mkdir -p /home/user/bin && ln -sf \$(which python3) /home/user/bin/python3.11 && export PATH=/home/user/bin:\$PATH && rm -rf .buildozer/android/platform/python-for-android && yes | buildozer -v android debug"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
