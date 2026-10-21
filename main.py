@@ -24,7 +24,7 @@ class MainLayout(FloatLayout):
         super().__init__(**kwargs)
         self.menu_left_open = False
         self.menu_right_open = False
-        self.current_file = "main_script.py" # Файл по умолчанию
+        self.current_file = "main_script.py"
 
         # Путь к папке с проектами
         app = App.get_running_app()
@@ -38,12 +38,13 @@ class MainLayout(FloatLayout):
         # Верхняя панель
         top_bar = BoxLayout(size_hint_y=None, height='50dp', spacing=5, padding=[5, 5, 5, 5])
         
-        self.menu_left_btn = Button(text="☰", size_hint_x=None, width='50dp', font_size='24sp', background_color=(0.2, 0.2, 0.2, 1))
+        # Убрали иконки, поставили текст. Увеличили ширину кнопок, чтобы текст влез.
+        self.menu_left_btn = Button(text="Меню", size_hint_x=None, width='80dp', font_size='14sp', background_color=(0.2, 0.2, 0.2, 1))
         self.menu_left_btn.bind(on_press=self.toggle_left_menu)
         
         title = Label(text="MobileIDE", font_size='18sp', bold=True)
         
-        self.menu_right_btn = Button(text="📁", size_hint_x=None, width='50dp', font_size='20sp', background_color=(0.2, 0.4, 0.8, 1))
+        self.menu_right_btn = Button(text="Файлы", size_hint_x=None, width='80dp', font_size='14sp', background_color=(0.2, 0.4, 0.8, 1))
         self.menu_right_btn.bind(on_press=self.toggle_right_menu)
 
         top_bar.add_widget(self.menu_left_btn)
@@ -77,7 +78,7 @@ class MainLayout(FloatLayout):
             orientation='vertical', 
             size_hint=(None, 1), 
             width='220dp', 
-            pos_hint={'x': -1}, 
+            pos_hint={'x': -1}, # Спрятано слева
             padding=10, 
             spacing=10
         )
@@ -104,7 +105,7 @@ class MainLayout(FloatLayout):
             orientation='vertical', 
             size_hint=(None, 1), 
             width='250dp', 
-            pos_hint={'x': 1}, # Изначально спрятано справа
+            pos_hint={'x': 1}, # Спрятано справа (x=1 означает левый край ровно за правым краем экрана)
             padding=10, 
             spacing=10
         )
@@ -116,7 +117,7 @@ class MainLayout(FloatLayout):
         # Заголовок и кнопка создания файла
         header_layout = BoxLayout(size_hint_y=None, height='40dp')
         header_layout.add_widget(Label(text="Проекты", bold=True, halign='left'))
-        new_file_btn = Button(text="➕", size_hint_x=None, width='40dp', background_color=(0.2, 0.6, 0.2, 1))
+        new_file_btn = Button(text="+ Файл", size_hint_x=None, width='80dp', background_color=(0.2, 0.6, 0.2, 1))
         new_file_btn.bind(on_press=self.show_new_file_popup)
         header_layout.add_widget(new_file_btn)
         self.side_menu_right.add_widget(header_layout)
@@ -156,11 +157,14 @@ class MainLayout(FloatLayout):
 
     def toggle_right_menu(self, instance=None):
         if self.menu_right_open:
-            # Закрыть (уехать вправо)
+            # Закрыть (уехать вправо). x=1 означает, что левый край панели уходит за правый край экрана
             anim = Animation(pos_hint={'x': 1}, duration=0.2)
         else:
-            # Открыть (выехать слева от правого края)
-            anim = Animation(pos_hint={'right': 1}, duration=0.2)
+            # Открыть (выехать справа налево).
+            # Вычисляем x: 1 минус (ширина меню / ширину экрана). 
+            # Это точная математика, которая не глючит в Kivy.
+            target_x = 1 - (self.side_menu_right.width / Window.width)
+            anim = Animation(pos_hint={'x': target_x}, duration=0.2)
         anim.start(self.side_menu_right)
         self.menu_right_open = not self.menu_right_open
 
@@ -171,13 +175,11 @@ class MainLayout(FloatLayout):
         files = [f for f in os.listdir(self.projects_dir) if f.endswith('.py')]
         
         if not files:
-            # Если файлов нет, создаем дефолтный
             with open(os.path.join(self.projects_dir, "main_script.py"), "w") as f:
                 f.write('print("Hello, MobileIDE!")\n')
             files = ["main_script.py"]
 
         for filename in files:
-            # Подсвечиваем текущий файл
             bg_color = (0.3, 0.3, 0.3, 1) if filename == self.current_file else (0.2, 0.2, 0.2, 1)
             btn = Button(text=filename, size_hint_y=None, height='45dp', background_color=bg_color, halign='left')
             btn.bind(on_press=lambda x, fn=filename: self.load_file(fn))
@@ -192,7 +194,7 @@ class MainLayout(FloatLayout):
                     self.editor.text = f.read()
                 self.current_file = filename
                 self.output.text = f"Открыт файл: {filename}"
-                self.refresh_files() # Обновляем список, чтобы подсветить активный
+                self.refresh_files()
                 if self.menu_right_open:
                     self.toggle_right_menu() # Закрываем меню после выбора
             except Exception as e:
@@ -204,9 +206,9 @@ class MainLayout(FloatLayout):
         try:
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(self.editor.text)
-            self.output.text = f"✅ Сохранено: {self.current_file}"
+            self.output.text = f"Сохранено: {self.current_file}"
         except Exception as e:
-            self.output.text = f"❌ Ошибка сохранения: {e}"
+            self.output.text = f"Ошибка сохранения: {e}"
         if self.menu_left_open:
             self.toggle_left_menu()
 
@@ -271,7 +273,6 @@ class MainLayout(FloatLayout):
             sys.stdout = old_stdout
         if self.menu_left_open:
             self.toggle_left_menu()
-
 
 class MobileIDEApp(App):
     def build(self):
