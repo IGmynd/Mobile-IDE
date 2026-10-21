@@ -1,4 +1,4 @@
-from kivy.config import Config
+ from kivy.config import Config
 Config.set('graphics', 'orientation', 'portrait')
 
 from kivy.app import App
@@ -23,6 +23,9 @@ MENU_BG_COLOR = (0.3, 0.1, 0.4, 1) # Темно-фиолетовый для па
 
 Window.clearcolor = THEME_COLOR
 
+# МАГИЯ ДЛЯ КЛАВИАТУРЫ: сдвигает интерфейс вверх, чтобы поле ввода не перекрывалось
+Window.softinput_mode = 'below_target'
+
 class MainLayout(FloatLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -42,7 +45,6 @@ class MainLayout(FloatLayout):
         # Верхняя панель
         self.top_bar = BoxLayout(size_hint_y=None, height='50dp', spacing=5, padding=[5, 5, 5, 5])
         
-        # Рисуем фон для верхней панели (чтобы перекрыть основной фон)
         with self.top_bar.canvas.before:
             Color(*THEME_COLOR)
             self.top_bar_bg = Rectangle(size=self.top_bar.size, pos=self.top_bar.pos)
@@ -60,7 +62,7 @@ class MainLayout(FloatLayout):
         self.top_bar.add_widget(title)
         self.top_bar.add_widget(self.menu_right_btn)
 
-        # Редактор (оставляем темным для удобства чтения кода)
+        # Редактор
         self.editor = TextInput(
             text='print("Hello, MobileIDE!")\n',
             font_size='16sp',
@@ -69,7 +71,7 @@ class MainLayout(FloatLayout):
             cursor_color=(1, 1, 1, 1)
         )
 
-        # Вывод (тоже темный)
+        # Вывод
         self.output = TextInput(
             readonly=True,
             font_size='14sp',
@@ -155,9 +157,8 @@ class MainLayout(FloatLayout):
         self.menu_right_bg.pos = instance.pos
         self.menu_right_bg.size = instance.size
 
-    # --- Анимация меню (ИСПРАВЛЕНО) ---
+    # --- Анимация меню ---
     def toggle_left_menu(self, instance=None):
-        # Если открыто правое — принудительно закрываем его
         if self.menu_right_open:
             self.toggle_right_menu()
 
@@ -169,7 +170,6 @@ class MainLayout(FloatLayout):
         self.menu_left_open = not self.menu_left_open
 
     def toggle_right_menu(self, instance=None):
-        # Если открыто левое — принудительно закрываем его
         if self.menu_left_open:
             self.toggle_left_menu()
 
@@ -225,6 +225,8 @@ class MainLayout(FloatLayout):
     def show_new_file_popup(self, instance):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         popup_label = Label(text="Имя файла (без .py):", size_hint_y=None, height='30dp')
+        
+        # Текстовое поле
         text_input = TextInput(text="script", multiline=False, size_hint_y=None, height='40dp')
         
         btn_layout = BoxLayout(size_hint_y=None, height='40dp', spacing=10)
@@ -238,7 +240,8 @@ class MainLayout(FloatLayout):
         content.add_widget(text_input)
         content.add_widget(btn_layout)
 
-        popup = Popup(title="Новый файл", content=content, size_hint=(0.8, 0.4))
+        # Уменьшили высоту окна (0.4), чтобы оно точно поместилось над клавиатурой
+        popup = Popup(title="Новый файл", content=content, size_hint=(0.85, 0.4), auto_dismiss=False)
 
         def create_action(instance):
             name = text_input.text.strip()
@@ -253,7 +256,11 @@ class MainLayout(FloatLayout):
 
         btn_cancel.bind(on_press=popup.dismiss)
         btn_create.bind(on_press=create_action)
+        
+        # Открываем окно и сразу ставим фокус на поле ввода, 
+        # чтобы клавиатура выехала моментально
         popup.open()
+        text_input.focus = True
 
     def clear_all(self, instance):
         self.output.text = ""
