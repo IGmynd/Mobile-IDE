@@ -1,6 +1,4 @@
-
 from kivy.config import Config
-# Принудительно включаем вертикальную (портретную) ориентацию
 Config.set('graphics', 'orientation', 'portrait')
 
 from kivy.app import App
@@ -9,6 +7,8 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.popup import Popup
 from kivy.core.window import Window
 from kivy.animation import Animation
 from kivy.graphics import Color, Rectangle
@@ -22,25 +22,37 @@ Window.clearcolor = (0.1, 0.1, 0.1, 1)
 class MainLayout(FloatLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.menu_open = False
+        self.menu_left_open = False
+        self.menu_right_open = False
+        self.current_file = "main_script.py" # Файл по умолчанию
+
+        # Путь к папке с проектами
+        app = App.get_running_app()
+        self.projects_dir = os.path.join(app.user_data_dir, "projects")
+        if not os.path.exists(self.projects_dir):
+            os.makedirs(self.projects_dir)
 
         # === ОСНОВНОЙ КОНТЕНТ ===
         self.main_content = BoxLayout(orientation='vertical')
         
-        # Верхняя панель (только заголовок и меню)
+        # Верхняя панель
         top_bar = BoxLayout(size_hint_y=None, height='50dp', spacing=5, padding=[5, 5, 5, 5])
         
-        self.menu_btn = Button(text="☰", size_hint_x=None, width='50dp', font_size='24sp', background_color=(0.2, 0.2, 0.2, 1))
-        self.menu_btn.bind(on_press=self.toggle_menu)
+        self.menu_left_btn = Button(text="☰", size_hint_x=None, width='50dp', font_size='24sp', background_color=(0.2, 0.2, 0.2, 1))
+        self.menu_left_btn.bind(on_press=self.toggle_left_menu)
         
         title = Label(text="MobileIDE", font_size='18sp', bold=True)
         
-        top_bar.add_widget(self.menu_btn)
+        self.menu_right_btn = Button(text="📁", size_hint_x=None, width='50dp', font_size='20sp', background_color=(0.2, 0.4, 0.8, 1))
+        self.menu_right_btn.bind(on_press=self.toggle_right_menu)
+
+        top_bar.add_widget(self.menu_left_btn)
         top_bar.add_widget(title)
+        top_bar.add_widget(self.menu_right_btn)
 
         # Редактор
         self.editor = TextInput(
-            text='print("Hello, MobileIDE!")\n\n# Попробуй написать что-нибудь свое:\n# for i in range(5):\n#     print(f"Итерация {i}")',
+            text='print("Hello, MobileIDE!")\n',
             font_size='16sp',
             background_color=(0.15, 0.15, 0.15, 1),
             foreground_color=(1, 1, 1, 1),
@@ -53,80 +65,192 @@ class MainLayout(FloatLayout):
             font_size='14sp',
             background_color=(0.05, 0.05, 0.05, 1),
             foreground_color=(0.8, 1, 0.8, 1),
-            text="Здесь появится результат..."
+            text="Готов к работе..."
         )
 
         self.main_content.add_widget(top_bar)
         self.main_content.add_widget(self.editor)
         self.main_content.add_widget(self.output)
 
-        # === ВЫДВИЖНОЕ МЕНЮ СЛЕВА ===
-        self.side_menu = BoxLayout(
+        # === ЛЕВОЕ МЕНЮ (Действия) ===
+        self.side_menu_left = BoxLayout(
             orientation='vertical', 
             size_hint=(None, 1), 
             width='220dp', 
-            pos_hint={'x': -1}, # Изначально спрятано за левым краем экрана
+            pos_hint={'x': -1}, 
             padding=10, 
             spacing=10
         )
-        
-        # Задний фон для меню, чтобы редактор не просвечивал
-        with self.side_menu.canvas.before:
+        with self.side_menu_left.canvas.before:
             Color(0.2, 0.2, 0.2, 1)
-            self.menu_bg = Rectangle(size=self.side_menu.size, pos=self.side_menu.pos)
-        self.side_menu.bind(size=self._update_rect, pos=self._update_rect)
+            self.menu_left_bg = Rectangle(size=self.side_menu_left.size, pos=self.side_menu_left.pos)
+        self.side_menu_left.bind(size=self._update_left_bg, pos=self._update_left_bg)
 
-        # Кнопки внутри меню
         btn_save = Button(text="Сохранить", size_hint_y=None, height='50dp', background_color=(0.2, 0.4, 0.8, 1))
         btn_save.bind(on_press=self.save_code)
-        
         btn_clear = Button(text="Очистить", size_hint_y=None, height='50dp', background_color=(0.5, 0.5, 0.5, 1))
         btn_clear.bind(on_press=self.clear_all)
-        
         btn_run = Button(text="Запуск", size_hint_y=None, height='50dp', background_color=(0.2, 0.6, 0.2, 1))
         btn_run.bind(on_press=self.run_code)
 
-        self.side_menu.add_widget(Label(text="Действия", size_hint_y=None, height='40dp', bold=True))
-        self.side_menu.add_widget(btn_save)
-        self.side_menu.add_widget(btn_clear)
-        self.side_menu.add_widget(btn_run)
-        self.side_menu.add_widget(Label()) # Пружина, чтобы кнопки были сверху
+        self.side_menu_left.add_widget(Label(text="Действия", size_hint_y=None, height='40dp', bold=True))
+        self.side_menu_left.add_widget(btn_save)
+        self.side_menu_left.add_widget(btn_clear)
+        self.side_menu_left.add_widget(btn_run)
+        self.side_menu_left.add_widget(Label())
+
+        # === ПРАВОЕ МЕНЮ (Файлы) ===
+        self.side_menu_right = BoxLayout(
+            orientation='vertical', 
+            size_hint=(None, 1), 
+            width='250dp', 
+            pos_hint={'x': 1}, # Изначально спрятано справа
+            padding=10, 
+            spacing=10
+        )
+        with self.side_menu_right.canvas.before:
+            Color(0.15, 0.15, 0.15, 1)
+            self.menu_right_bg = Rectangle(size=self.side_menu_right.size, pos=self.side_menu_right.pos)
+        self.side_menu_right.bind(size=self._update_right_bg, pos=self._update_right_bg)
+
+        # Заголовок и кнопка создания файла
+        header_layout = BoxLayout(size_hint_y=None, height='40dp')
+        header_layout.add_widget(Label(text="Проекты", bold=True, halign='left'))
+        new_file_btn = Button(text="➕", size_hint_x=None, width='40dp', background_color=(0.2, 0.6, 0.2, 1))
+        new_file_btn.bind(on_press=self.show_new_file_popup)
+        header_layout.add_widget(new_file_btn)
+        self.side_menu_right.add_widget(header_layout)
+
+        # Прокручиваемый список файлов
+        self.files_scroll = ScrollView()
+        self.files_layout = BoxLayout(orientation='vertical', size_hint_y=None, spacing=5)
+        self.files_layout.bind(minimum_height=self.files_layout.setter('height'))
+        self.files_scroll.add_widget(self.files_layout)
+        self.side_menu_right.add_widget(self.files_scroll)
 
         # Добавляем всё на экран
         self.add_widget(self.main_content)
-        self.add_widget(self.side_menu)
+        self.add_widget(self.side_menu_left)
+        self.add_widget(self.side_menu_right)
 
-    def _update_rect(self, instance, value):
-        self.menu_bg.pos = instance.pos
-        self.menu_bg.size = instance.size
+        # Загружаем список файлов
+        self.refresh_files()
+        self.load_file(self.current_file)
 
-    def toggle_menu(self, instance=None):
-        if self.menu_open:
-            # Закрыть (уехать влево за экран)
+    # --- Обновление фона меню ---
+    def _update_left_bg(self, instance, value):
+        self.menu_left_bg.pos = instance.pos
+        self.menu_left_bg.size = instance.size
+    def _update_right_bg(self, instance, value):
+        self.menu_right_bg.pos = instance.pos
+        self.menu_right_bg.size = instance.size
+
+    # --- Анимация меню ---
+    def toggle_left_menu(self, instance=None):
+        if self.menu_left_open:
             anim = Animation(pos_hint={'x': -1}, duration=0.2)
         else:
-            # Открыть (выехать на экран)
             anim = Animation(pos_hint={'x': 0}, duration=0.2)
+        anim.start(self.side_menu_left)
+        self.menu_left_open = not self.menu_left_open
+
+    def toggle_right_menu(self, instance=None):
+        if self.menu_right_open:
+            # Закрыть (уехать вправо)
+            anim = Animation(pos_hint={'x': 1}, duration=0.2)
+        else:
+            # Открыть (выехать слева от правого края)
+            anim = Animation(pos_hint={'right': 1}, duration=0.2)
+        anim.start(self.side_menu_right)
+        self.menu_right_open = not self.menu_right_open
+
+    # --- Работа с файлами ---
+    def refresh_files(self):
+        """Сканирует папку и обновляет список кнопок"""
+        self.files_layout.clear_widgets()
+        files = [f for f in os.listdir(self.projects_dir) if f.endswith('.py')]
         
-        anim.start(self.side_menu)
-        self.menu_open = not self.menu_open
+        if not files:
+            # Если файлов нет, создаем дефолтный
+            with open(os.path.join(self.projects_dir, "main_script.py"), "w") as f:
+                f.write('print("Hello, MobileIDE!")\n')
+            files = ["main_script.py"]
+
+        for filename in files:
+            # Подсвечиваем текущий файл
+            bg_color = (0.3, 0.3, 0.3, 1) if filename == self.current_file else (0.2, 0.2, 0.2, 1)
+            btn = Button(text=filename, size_hint_y=None, height='45dp', background_color=bg_color, halign='left')
+            btn.bind(on_press=lambda x, fn=filename: self.load_file(fn))
+            self.files_layout.add_widget(btn)
+
+    def load_file(self, filename):
+        """Загружает код из выбранного файла"""
+        filepath = os.path.join(self.projects_dir, filename)
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    self.editor.text = f.read()
+                self.current_file = filename
+                self.output.text = f"Открыт файл: {filename}"
+                self.refresh_files() # Обновляем список, чтобы подсветить активный
+                if self.menu_right_open:
+                    self.toggle_right_menu() # Закрываем меню после выбора
+            except Exception as e:
+                self.output.text = f"Ошибка чтения: {e}"
+
+    def save_code(self, instance):
+        """Сохраняет текущий текст в текущий файл"""
+        filepath = os.path.join(self.projects_dir, self.current_file)
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(self.editor.text)
+            self.output.text = f"✅ Сохранено: {self.current_file}"
+        except Exception as e:
+            self.output.text = f"❌ Ошибка сохранения: {e}"
+        if self.menu_left_open:
+            self.toggle_left_menu()
+
+    def show_new_file_popup(self, instance):
+        """Всплывающее окно для создания файла"""
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        popup_label = Label(text="Имя файла (без .py):", size_hint_y=None, height='30dp')
+        text_input = TextInput(text="script", multiline=False, size_hint_y=None, height='40dp')
+        
+        btn_layout = BoxLayout(size_hint_y=None, height='40dp', spacing=10)
+        btn_cancel = Button(text="Отмена", background_color=(0.6, 0.2, 0.2, 1))
+        btn_create = Button(text="Создать", background_color=(0.2, 0.6, 0.2, 1))
+
+        btn_layout.add_widget(btn_cancel)
+        btn_layout.add_widget(btn_create)
+
+        content.add_widget(popup_label)
+        content.add_widget(text_input)
+        content.add_widget(btn_layout)
+
+        popup = Popup(title="Новый файл", content=content, size_hint=(0.8, 0.4))
+
+        def create_action(instance):
+            name = text_input.text.strip()
+            if name:
+                filename = f"{name}.py" if not name.endswith('.py') else name
+                filepath = os.path.join(self.projects_dir, filename)
+                if not os.path.exists(filepath):
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        f.write(f'# Файл {filename}\nprint("Привет из {filename}")\n')
+                    self.load_file(filename)
+                popup.dismiss()
+
+        btn_cancel.bind(on_press=popup.dismiss)
+        btn_create.bind(on_press=create_action)
+        popup.open()
 
     def clear_all(self, instance):
         self.output.text = ""
         self.editor.text = ""
-        self.toggle_menu() # Закрываем меню после действия
+        if self.menu_left_open:
+            self.toggle_left_menu()
 
-    def save_code(self, instance):
-        app = App.get_running_app()
-        file_path = os.path.join(app.user_data_dir, "main_script.py")
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(self.editor.text)
-            self.output.text = f"✅ Код сохранен!\nПуть: {file_path}"
-        except Exception as e:
-            self.output.text = f"❌ Ошибка сохранения: {e}"
-        self.toggle_menu()
-
+    # --- Запуск кода ---
     def run_code(self, instance):
         code = self.editor.text
         self.output.text = ""
@@ -138,31 +262,21 @@ class MainLayout(FloatLayout):
             exec(code, {})
             result = captured_output.getvalue()
             if not result:
-                result = "[Код выполнен успешно, но ничего не вывел]"
+                result = "[Код выполнен успешно]"
             self.output.text = result
         except Exception:
             error_msg = traceback.format_exc()
             self.output.text = f"ОШИБКА:\n{error_msg}"
         finally:
             sys.stdout = old_stdout
-        self.toggle_menu() # Закрываем меню после действия
+        if self.menu_left_open:
+            self.toggle_left_menu()
 
 
 class MobileIDEApp(App):
     def build(self):
         self.title = "MobileIDE"
         return MainLayout()
-
-    def on_start(self):
-        file_path = os.path.join(self.user_data_dir, "main_script.py")
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    self.root.editor.text = content
-                    self.root.output.text = "Файл main_script.py загружен."
-            except Exception as e:
-                self.root.output.text = f"Ошибка загрузки: {e}"
 
 if __name__ == '__main__':
     MobileIDEApp().run()
