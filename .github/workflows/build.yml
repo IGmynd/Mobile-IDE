@@ -30,7 +30,7 @@ jobs:
         restore-keys: |
           buildozer-local-
 
-    - name: Build APK (Clean cache & fix NDK)
+    - name: Build APK (Clean cache & NDK 25c)
       run: |
         docker run --rm \
           -e HOME=/home/user \
