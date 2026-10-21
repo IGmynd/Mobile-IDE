@@ -31,11 +31,11 @@ jobs:
           buildozer-local-
 
     - name: Build APK with official Buildozer Docker image
-      run: |
-        docker run --rm \
-          -v "${{ github.workspace }}":/home/user/hostcwd \
-          -v "$HOME/.buildozer":/home/user/.buildozer \
-          kivy/buildozer android clean android debug
+  run: |
+    docker run --rm \
+      -v "${{ github.workspace }}":/home/user/hostcwd \
+      -v "$HOME/.buildozer":/home/user/.buildozer \
+      kivy/buildozer sh -c "pip install appdirs && buildozer -v android debug"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
