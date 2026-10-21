@@ -406,7 +406,7 @@ class MainLayout(FloatLayout):
 
         try:
             sys.settrace(trace_func) # Включаем слежку за строками
-            exec(code, {})
+            exec(code, {"__name__": "__main__"})
             result = captured_output.getvalue()
             if not result: result = "[Код выполнен успешно]"
         except RuntimeError as e:
