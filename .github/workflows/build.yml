@@ -14,17 +14,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Клонируем p4a заранее, чтобы Action не делал это внутри контейнера (экономит время и память)
-    - name: Configure git for large clones
-      run: |
-        git config --global http.postBuffer 524288000
-        git config --global http.lowSpeedLimit 0
-
-    - name: Clone python-for-android
-      run: |
-        git clone --depth 1 https://github.com/kivy/python-for-android.git ./python-for-android
-
-    # Кэшируем глобальную директорию Buildozer (SDK, NDK)
     - name: Cache Buildozer global directory
       uses: actions/cache@v4
       with:
@@ -33,7 +22,6 @@ jobs:
         restore-keys: |
           buildozer-global-
 
-    # Кэшируем локальную директорию сборки (результаты компиляции)
     - name: Cache local .buildozer
       uses: actions/cache@v4
       with:
@@ -42,20 +30,16 @@ jobs:
         restore-keys: |
           buildozer-local-
 
-    # Используем готовый Action с официальным Docker-образом
-    - name: Build with Buildozer
-      uses: ArtemSBulgakov/buildozer-action@v1
-      id: buildozer
-      with:
-        workdir: .
-        buildozer_version: stable
-        # Если нужно ограничить память, можно передать переменную окружения
-        # env:
-        #   MAKE_JOBS: 1
+    - name: Build APK with official Buildozer Docker image
+      run: |
+        docker run --rm \
+          -v "${{ github.workspace }}":/home/user/hostcwd \
+          -v "$HOME/.buildozer":/home/user/.buildozer \
+          kivy/buildozer android debug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: MobileIDE-Debug-APK
-        path: ${{ steps.buildozer.outputs.filename }}
+        path: bin/*.apk
         if-no-files-found: error
