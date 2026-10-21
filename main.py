@@ -9,6 +9,7 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
+from kivy.uix.filechooser import FileChooserListView
 from kivy.core.window import Window
 from kivy.animation import Animation
 from kivy.graphics import Color, Rectangle
@@ -18,7 +19,14 @@ import io
 import traceback
 import os
 import threading
-import time
+import shutil
+
+# Импортируем редактор с подсветкой синтаксиса
+try:
+    from kivy_garden.codeinput import CodeInput
+    HAS_CODEINPUT = True
+except ImportError:
+    HAS_CODEINPUT = False
 
 THEME_COLOR = (0.6, 0.2, 0.8, 1)
 MENU_BG_COLOR = (0.3, 0.1, 0.4, 1)
@@ -26,23 +34,32 @@ MENU_BG_COLOR = (0.3, 0.1, 0.4, 1)
 Window.clearcolor = THEME_COLOR
 Window.softinput_mode = 'below_target'
 
-# === КАСТОМНЫЙ РЕДАКТОР С УМНЫМИ ОТСТУПАМИ ===
-class CodeEditor(TextInput):
-    def insert_text(self, substring, from_undo=False):
-        if substring == '\n':
-            # Получаем текущую строку
-            lines = self.text.split('\n')
-            current_line = lines[-1] if lines else ""
-            
-            # Если строка заканчивается на ':', добавляем отступ
-            if current_line.strip().endswith(':'):
-                substring = '\n    ' # 4 пробела
-            # Если уже есть отступ, сохраняем его
-            elif current_line.startswith('    '):
-                indent = len(current_line) - len(current_line.lstrip())
-                substring = '\n' + (' ' * indent)
-        
-        super().insert_text(substring, from_undo)
+# === КАСТОМНЫЙ РЕДАКТОР ===
+if HAS_CODEINPUT:
+    class CodeEditor(CodeInput):
+        def insert_text(self, substring, from_undo=False):
+            if substring == '\n':
+                lines = self.text.split('\n')
+                current_line = lines[-1] if lines else ""
+                if current_line.strip().endswith(':'):
+                    substring = '\n    '
+                elif current_line.startswith('    '):
+                    indent = len(current_line) - len(current_line.lstrip())
+                    substring = '\n' + (' ' * indent)
+            super().insert_text(substring, from_undo)
+else:
+    # Запасной вариант, если подсветка не установится
+    class CodeEditor(TextInput):
+        def insert_text(self, substring, from_undo=False):
+            if substring == '\n':
+                lines = self.text.split('\n')
+                current_line = lines[-1] if lines else ""
+                if current_line.strip().endswith(':'):
+                    substring = '\n    '
+                elif current_line.startswith('    '):
+                    indent = len(current_line) - len(current_line.lstrip())
+                    substring = '\n' + (' ' * indent)
+            super().insert_text(substring, from_undo)
 
 class MainLayout(FloatLayout):
     def __init__(self, **kwargs):
@@ -50,8 +67,6 @@ class MainLayout(FloatLayout):
         self.menu_left_open = False
         self.menu_right_open = False
         self.current_file = "main_script.py"
-        
-        # Флаги для остановки кода
         self.is_running = False
         self.stop_requested = False
 
@@ -80,14 +95,25 @@ class MainLayout(FloatLayout):
         self.top_bar.add_widget(title)
         self.top_bar.add_widget(self.menu_right_btn)
 
-        # Редактор (используем наш новый CodeEditor)
-        self.editor = CodeEditor(
-            text='print("Hello, MobileIDE!")\n',
-            font_size='16sp',
-            background_color=(0.12, 0.12, 0.12, 1),
-            foreground_color=(1, 1, 1, 1),
-            cursor_color=(1, 1, 1, 1)
-        )
+        # Редактор с подсветкой синтаксиса
+        if HAS_CODEINPUT:
+            self.editor = CodeEditor(
+                text='print("Hello, MobileIDE!")\n',
+                lexer='python', # Включаем подсветку Python
+                style='monokai', # Тема оформления
+                font_size='16sp',
+                background_color=(0.12, 0.12, 0.12, 1),
+                foreground_color=(1, 1, 1, 1),
+                cursor_color=(1, 1, 1, 1)
+            )
+        else:
+            self.editor = CodeEditor(
+                text='print("Hello, MobileIDE!")\n',
+                font_size='16sp',
+                background_color=(0.12, 0.12, 0.12, 1),
+                foreground_color=(1, 1, 1, 1),
+                cursor_color=(1, 1, 1, 1)
+            )
 
         # Вывод
         self.output = TextInput(
@@ -122,19 +148,19 @@ class MainLayout(FloatLayout):
             self.menu_left_bg = Rectangle(size=self.side_menu_left.size, pos=self.side_menu_left.pos)
         self.side_menu_left.bind(size=self._update_left_bg, pos=self._update_left_bg)
 
-        btn_save = Button(text="Сохранить", size_hint_y=None, height='50dp', background_color=(0.2, 0.4, 0.8, 1))
+        btn_save = Button(text="Сохранить", size_hint_y=None, height='45dp', background_color=(0.2, 0.4, 0.8, 1))
         btn_save.bind(on_press=self.save_code)
         
-        btn_export = Button(text="Экспорт в Загрузки", size_hint_y=None, height='50dp', background_color=(0.8, 0.6, 0.2, 1))
+        btn_export = Button(text="Экспорт в Загрузки", size_hint_y=None, height='45dp', background_color=(0.8, 0.6, 0.2, 1))
         btn_export.bind(on_press=self.export_code)
         
-        btn_clear = Button(text="Очистить вывод", size_hint_y=None, height='50dp', background_color=(0.5, 0.5, 0.5, 1))
+        btn_clear = Button(text="Очистить вывод", size_hint_y=None, height='45dp', background_color=(0.5, 0.5, 0.5, 1))
         btn_clear.bind(on_press=self.clear_output)
         
-        btn_search = Button(text="Поиск и Замена", size_hint_y=None, height='50dp', background_color=(0.4, 0.4, 0.6, 1))
+        btn_search = Button(text="Поиск и Замена", size_hint_y=None, height='45dp', background_color=(0.4, 0.4, 0.6, 1))
         btn_search.bind(on_press=self.show_search_popup)
 
-        btn_toggle_output = Button(text="Скрыть/Показать вывод", size_hint_y=None, height='50dp', background_color=(0.6, 0.3, 0.6, 1))
+        btn_toggle_output = Button(text="Скрыть вывод", size_hint_y=None, height='45dp', background_color=(0.6, 0.3, 0.6, 1))
         btn_toggle_output.bind(on_press=self.toggle_output_panel)
 
         self.btn_run = Button(text="Запуск", size_hint_y=None, height='50dp', background_color=(0.2, 0.6, 0.2, 1))
@@ -158,8 +184,14 @@ class MainLayout(FloatLayout):
 
         header_layout = BoxLayout(size_hint_y=None, height='40dp')
         header_layout.add_widget(Label(text="Проекты", bold=True, halign='left'))
-        new_file_btn = Button(text="+ Файл", size_hint_x=None, width='80dp', background_color=(0.2, 0.6, 0.2, 1))
+        
+        # Добавили кнопку Импорта
+        import_btn = Button(text="Импорт", size_hint_x=None, width='70dp', background_color=(0.2, 0.4, 0.8, 1))
+        import_btn.bind(on_press=self.show_import_file_popup)
+        new_file_btn = Button(text="+ Файл", size_hint_x=None, width='70dp', background_color=(0.2, 0.6, 0.2, 1))
         new_file_btn.bind(on_press=self.show_new_file_popup)
+        
+        header_layout.add_widget(import_btn)
         header_layout.add_widget(new_file_btn)
         self.side_menu_right.add_widget(header_layout)
 
@@ -269,45 +301,73 @@ class MainLayout(FloatLayout):
             self.output.text = f"Ошибка сохранения: {e}"
         if self.menu_left_open: self.toggle_left_menu()
 
-    # === НОВОЕ: ЭКСПОРТ В ЗАГРУЗКИ ===
     def export_code(self, instance):
         if self.menu_left_open: self.toggle_left_menu()
-        
-        # Путь к общей папке Загрузки
         download_dir = "/storage/emulated/0/Download"
-        
         if not os.path.exists(download_dir):
-            self.output.text = "❌ Папка Download не найдена на этом устройстве."
+            self.output.text = "❌ Папка Download не найдена."
             return
 
         dest_path = os.path.join(download_dir, self.current_file)
         try:
             with open(dest_path, "w", encoding="utf-8") as f:
                 f.write(self.editor.text)
-            self.output.text = f"✅ Экспортировано в:\n{dest_path}\nТеперь файл виден в проводнике."
+            self.output.text = f"✅ Экспортировано в:\n{dest_path}"
         except Exception as e:
             self.output.text = f"❌ Ошибка экспорта (нет прав?): {e}"
 
-    # === НОВОЕ: ПОИСК И ЗАМЕНА ===
+    # === НОВОЕ: ИМПОРТ ФАЙЛА С ТЕЛЕФОНА ===
+    def show_import_file_popup(self, instance):
+        if self.menu_right_open: self.toggle_right_menu()
+        
+        # Открываем проводник сразу в папке Загрузок
+        filechooser = FileChooserListView(path="/storage/emulated/0/Download", filters=['*.py'])
+        
+        layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        layout.add_widget(filechooser)
+        
+        btn_layout = BoxLayout(size_hint_y=None, height='40dp', spacing=10)
+        btn_cancel = Button(text="Отмена", background_color=(0.6, 0.2, 0.2, 1))
+        btn_import = Button(text="Импортировать", background_color=(0.2, 0.6, 0.2, 1))
+        
+        btn_layout.add_widget(btn_cancel)
+        btn_layout.add_widget(btn_import)
+        layout.add_widget(btn_layout)
+
+        popup = Popup(title="Выбери .py файл", content=layout, size_hint=(0.95, 0.9))
+
+        def do_import(inst):
+            if filechooser.selection:
+                source_path = filechooser.selection[0]
+                filename = os.path.basename(source_path)
+                dest_path = os.path.join(self.projects_dir, filename)
+                try:
+                    shutil.copy2(source_path, dest_path)
+                    self.load_file(filename)
+                    self.output.text = f"✅ Импортирован: {filename}"
+                except Exception as e:
+                    self.output.text = f"❌ Ошибка импорта: {e}"
+            popup.dismiss()
+
+        btn_cancel.bind(on_press=popup.dismiss)
+        btn_import.bind(on_press=do_import)
+        popup.open()
+
     def show_search_popup(self, instance):
         if self.menu_left_open: self.toggle_left_menu()
-        
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         find_input = TextInput(hint_text="Что искать...", multiline=False, size_hint_y=None, height='40dp')
         replace_input = TextInput(hint_text="На что заменить...", multiline=False, size_hint_y=None, height='40dp')
-        
         btn_layout = BoxLayout(size_hint_y=None, height='40dp', spacing=10)
         btn_cancel = Button(text="Отмена", background_color=(0.6, 0.2, 0.2, 1))
         btn_replace = Button(text="Заменить всё", background_color=(0.2, 0.6, 0.2, 1))
 
         btn_layout.add_widget(btn_cancel)
         btn_layout.add_widget(btn_replace)
-        
         content.add_widget(Label(text="Поиск и замена", size_hint_y=None, height='30dp'))
         content.add_widget(find_input)
         content.add_widget(replace_input)
         content.add_widget(btn_layout)
-
         popup = Popup(title="Поиск и Замена", content=content, size_hint=(0.9, 0.5))
 
         def do_replace(instance):
@@ -324,7 +384,6 @@ class MainLayout(FloatLayout):
         popup.open()
         find_input.focus = True
 
-    # === НОВОЕ: СКРЫТЬ/ПОКАЗАТЬ ВЫВОД ===
     def toggle_output_panel(self, instance):
         if self.output.height > 0:
             self.output.height = 0
@@ -352,7 +411,6 @@ class MainLayout(FloatLayout):
         content.add_widget(Label(text="Имя файла:", size_hint_y=None, height='30dp'))
         content.add_widget(text_input)
         content.add_widget(btn_layout)
-
         popup = Popup(title="Новый файл", content=content, size_hint=(0.85, 0.4))
 
         def create_action(instance):
@@ -374,7 +432,6 @@ class MainLayout(FloatLayout):
     # === ЗАПУСК И ОСТАНОВКА КОДА ===
     def run_code(self, instance):
         if self.is_running:
-            # Если код уже работает, кнопка работает как СТОП
             self.stop_requested = True
             self.output.text += "\n[Запрошена остановка...]"
             return
@@ -384,52 +441,9 @@ class MainLayout(FloatLayout):
         self.is_running = True
         self.stop_requested = False
         
-        # Меняем кнопку на красную "СТОП"
         self.btn_run.text = "СТОП"
         self.btn_run.background_color = (0.8, 0.2, 0.2, 1)
 
         if self.menu_left_open: self.toggle_left_menu()
 
         thread = threading.Thread(target=self._execute_code_in_thread, args=(code,))
-        thread.daemon = True
-        thread.start()
-
-    def _execute_code_in_thread(self, code):
-        old_stdout = sys.stdout
-        sys.stdout = captured_output = io.StringIO()
-        
-        # Трассировщик для остановки цикла
-        def trace_func(frame, event, arg):
-            if self.stop_requested:
-                raise RuntimeError("Выполнение остановлено пользователем.")
-            return trace_func
-
-        try:
-            sys.settrace(trace_func) # Включаем слежку за строками
-            exec(code, {"__name__": "__main__"})
-            result = captured_output.getvalue()
-            if not result: result = "[Код выполнен успешно]"
-        except RuntimeError as e:
-            result = f"ОСТАНОВЛЕНО:\n{e}"
-        except Exception:
-            result = f"ОШИБКА:\n{traceback.format_exc()}"
-        finally:
-            sys.settrace(None) # Отключаем слежку
-            sys.stdout = old_stdout
-            Clock.schedule_once(lambda dt: self._finish_execution(result))
-
-    def _finish_execution(self, result):
-        self.output.text = result
-        self.is_running = False
-        self.stop_requested = False
-        self.btn_run.text = "Запуск"
-        self.btn_run.background_color = (0.2, 0.6, 0.2, 1)
-
-
-class MobileIDEApp(App):
-    def build(self):
-        self.title = "MobileIDE v0.2"
-        return MainLayout()
-
-if __name__ == '__main__':
-    MobileIDEApp().run()
